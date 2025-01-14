@@ -1,0 +1,44 @@
+# Python 관련
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# 환경 파일
+.env
+*.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# 가상환경
+venv/
+.venv/
+
+# PyInstaller
+*.spec
+
+# 임베딩 및 캐시 파일
+embeddings.pt
+*.pth
+*.pkl
+.cache/
+*.h5
+
+# 운영체제 관련
+.DS_Store
+Thumbs.db
+
+# IDE 및 편집기 관련
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# 기타
+*.bak
+*.tmp
+data.json
