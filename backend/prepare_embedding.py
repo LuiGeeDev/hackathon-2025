@@ -24,4 +24,4 @@ torch.save({
     'answer_embeddings': answer_embeddings
 }, 'embeddings.pt')
 
-print("임베딩 저장 완료: embed
+print("임베딩 저장 완료: embeddings.pt")
