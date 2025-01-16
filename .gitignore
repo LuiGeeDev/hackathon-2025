@@ -1,0 +1,9 @@
+# 운영체제 관련
+.DS_Store
+Thumbs.db
+
+# IDE 및 편집기 관련
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
