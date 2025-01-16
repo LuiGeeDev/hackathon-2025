@@ -2,25 +2,53 @@ import { FormEvent, useState } from "react";
 
 function App() {
   const [question, setQuestion] = useState("");
-  const [response, setResponse] = useState<{
-    answer: string;
-  }[] | null>(null);
+  const [details, setDetails] = useState<
+    { title: string; question: string; answer: string; source: string }[] | null
+  >(null);
+  const [generatedAnswer, setGeneratedAnswer] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const res = await fetch("http://127.0.0.1:5000/api/question", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_question: question }),
+    setDetails(null);
+    setGeneratedAnswer(null);
+
+    // details 요청
+    fetch("http://127.0.0.1:5000/api/question_details", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_question: question }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setDetails(data.details);
+      })
+      .catch((error) => {
+        console.error("Details Error:", error);
       });
-      const data: {
-        answer: string;
-      }[] = await res.json();
-      setResponse(data);
-    } catch (error) {
-      console.error("Error:", error);
-    }
+
+    // generated_answer 스트리밍 요청
+    fetch("http://127.0.0.1:5000/api/stream_generated_answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_question: question }),
+    })
+      .then(async (res) => {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+
+        if (reader) {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            console.log("Received chunk:", chunk); // 디버깅
+            setGeneratedAnswer((prev) => (prev || "") + chunk);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Generated Answer Error:", error);
+      });
   };
 
   return (
@@ -39,10 +67,31 @@ function App() {
         </button>
       </form>
 
-      {response && (
+      {details && (
         <div style={{ marginTop: "20px" }}>
-          <h2>응답:</h2>
-          <pre>{JSON.stringify(response, null, 2)}</pre>
+          <h2>유사 질문 목록:</h2>
+          <ul>
+            {details.map((detail, index) => (
+              <li key={index}>
+                <strong>{detail.title}</strong> - {detail.question} (출처:{" "}
+                <a
+                  href={detail.source}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  링크
+                </a>
+                )
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {generatedAnswer && (
+        <div style={{ marginTop: "20px" }}>
+          <h2>생성된 답변:</h2>
+          <p style={{ whiteSpace: "pre-wrap" }}>{generatedAnswer}</p>
         </div>
       )}
     </div>
