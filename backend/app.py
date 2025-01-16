@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
 import json
 import torch
@@ -15,113 +15,97 @@ CORS(app)
 
 # AWS Bedrock 설정
 bedrock_client = boto3.client(
-    service_name="bedrock-runtime",
+    "bedrock-runtime",
     region_name=os.getenv("AWS_REGION"),
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
 )
 
-# 모델 선택
-MODEL_TYPE = os.getenv("MODEL_TYPE", "claude")  # 기본값을 Claude로 설정
+MODEL_TYPE = os.getenv("MODEL_TYPE", "claude")  # 기본값 Claude
 
-# OpenAI 설정 (조건부 생성)
 openai_client = None
 if MODEL_TYPE == "openai":
     from openai import OpenAI
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# S3 설정
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_EMBEDDINGS_KEY = os.getenv("S3_EMBEDDINGS_KEY", "path/to/embeddings.pt")
-LOCAL_EMBEDDINGS_PATH = os.getenv("LOCAL_EMBEDDINGS_PATH", "./embeddings.pt")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "local")  # "local" 또는 "production"
-
-# S3 클라이언트 설정
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION"),
-)
-
-# Claude 모델 응답 생성
-def claude_response(prompt):
-    completion = bedrock_client.invoke_model(
-        modelId="anthropic.claude-3-5-sonnet-20241022-v2:0",
-        body=json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2048,
-            "temperature": 0.7,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": prompt}],
-                }
-            ],
-        })
-    )
-    response = json.loads(completion["body"].read())
-    return response["content"][0]["text"]
-
-# OpenAI 모델 응답 생성
-def openai_response(prompt):
-    if not openai_client:
-        raise ValueError("OpenAI client is not initialized. Check MODEL_TYPE or API_KEY.")
-    completion = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "당신은 정보를 검색하여 요약하는 검색 엔진처럼 행동합니다. "
-                    "사용자의 질문에 대해 다양한 출처를 참고하여 친근하고 이해하기 쉬운 답변을 작성하세요. "
-                    "답변은 명확하고 구체적이며, 충분히 상세해야 합니다. "
-                    "답변 중간에 출처를 [1], [2]와 같은 형식으로 명시하세요."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.7,
-    )
-    response = completion.choices[0].message.content
-    return response
-
-# Embeddings 파일 로드 함수
-def load_embeddings():
-    """
-    환경에 따라 embeddings.pt 파일을 로드합니다.
-    - 로컬 환경: 로컬 파일에서 로드
-    - 배포 환경: S3에서 다운로드 후 로컬 파일로 저장하고 로드
-    """
-    if ENVIRONMENT == "local":
-        print("로컬 환경: 로컬 파일에서 Embeddings 로드")
-        if not os.path.exists(LOCAL_EMBEDDINGS_PATH):
-            raise FileNotFoundError(f"로컬 파일이 없습니다: {LOCAL_EMBEDDINGS_PATH}")
-    else:
-        print("배포 환경: S3에서 Embeddings 다운로드 및 로드")
-        if not os.path.exists(LOCAL_EMBEDDINGS_PATH):
-            print("S3에서 Embeddings 파일 다운로드 중...")
-            s3_client.download_file(S3_BUCKET_NAME, S3_EMBEDDINGS_KEY, LOCAL_EMBEDDINGS_PATH)
-            print(f"Embeddings 파일이 {LOCAL_EMBEDDINGS_PATH}에 저장되었습니다.")
-
-    # 로컬 파일에서 임베딩 로드
-    return torch.load(LOCAL_EMBEDDINGS_PATH)
-
-# 서버 시작 시 embeddings 로드
-embeddings = load_embeddings()
-title_embeddings = embeddings["title_embeddings"]
-question_embeddings = embeddings["question_embeddings"]
-answer_embeddings = embeddings["answer_embeddings"]
-
 # JSON 데이터 로드
 with open('data.json', 'r') as file:
     data = json.load(file)
 
+# 사전 계산된 임베딩 로드
+embeddings = torch.load('embeddings.pt')
+title_embeddings = embeddings["title_embeddings"]
+question_embeddings = embeddings["question_embeddings"]
+answer_embeddings = embeddings["answer_embeddings"]
+
+# Claude 모델의 스트리밍 응답
+def claude_stream_response(prompt):
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 2048,
+        "temperature": 0.7,
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": prompt}]}
+        ]
+    }
+
+    # Bedrock 스트리밍 API 호출
+    response = bedrock_client.invoke_model_with_response_stream(
+        modelId="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        body=json.dumps(request_body)
+    )
+
+    # AWS Bedrock 이벤트 스트림 처리
+    event_stream = response.get('body', {})
+    for event in event_stream:
+        chunk = event.get('chunk')  # 스트리밍 청크 데이터 추출
+        if chunk:
+            try:
+                # 청크를 JSON으로 디코딩
+                message = json.loads(chunk.get("bytes").decode())
+
+                # 메시지 타입 처리
+                if message["type"] == "content_block_delta":
+                    yield message["delta"]["text"] or ""
+                elif message["type"] == "message_stop":
+                    return "\n"  # 스트리밍 종료
+            except (KeyError, json.JSONDecodeError) as e:
+                print(f"Error processing event: {e}")  # 에러 처리
+
+# OpenAI 모델의 스트리밍 응답
+def openai_stream_response(prompt):
+    if not openai_client:
+        raise ValueError("OpenAI client is not initialized. Check MODEL_TYPE or API_KEY.")
+
+    # OpenAI 스트리밍 API 호출
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "친근하고 상세한 검색형 답변을 생성하세요."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+        stream=True
+    )
+
+    # OpenAI 스트림 데이터 처리
+    for chunk in response:
+        try:
+            # 각 청크의 데이터를 확인
+            if hasattr(chunk, "choices") and chunk.choices:
+                # delta에서 content 추출
+                delta = chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    content = delta.content
+                    yield content
+            else:
+                print("No valid content in chunk:", chunk)  # 디버깅
+        except Exception as e:
+            print(f"Error processing OpenAI chunk: {e}")  # 디버깅 출력
+
+
 # 유사 질문 검색 로직
-def find_similar_questions(user_question, data, title_embeddings, question_embeddings, answer_embeddings):
-    """
-    사용자의 질문과 유사한 질문을 데이터에서 검색하는 함수.
-    """
+def find_similar_questions(user_question):
     user_embedding = generate_embeddings([user_question])
     title_similarities = torch.nn.functional.cosine_similarity(user_embedding, title_embeddings)
     question_similarities = torch.nn.functional.cosine_similarity(user_embedding, question_embeddings)
@@ -171,31 +155,45 @@ def generate_prompt(user_question, similar_questions):
     
     return prompt
 
-# 질문 API 엔드포인트
-@app.route('/api/question', methods=['POST'])
-def get_answer():
+# API 엔드포인트: 유사 질문 반환
+@app.route('/api/question_details', methods=['POST'])
+def get_question_details():
     user_data = request.json
     user_question = user_data.get("user_question")
 
-    # 유사한 질문 검색
-    similar_questions = find_similar_questions(user_question, data, title_embeddings, question_embeddings, answer_embeddings)
+    similar_questions = find_similar_questions(user_question)
+    return jsonify({"details": similar_questions})
 
-    # 프롬프트 생성
+# API 엔드포인트: AI 생성 답변 스트리밍
+@app.route('/api/stream_generated_answer', methods=['POST'])
+def stream_generated_answer():
+    user_data = request.json
+    user_question = user_data.get("user_question")
+
+    similar_questions = find_similar_questions(user_question)
     prompt = generate_prompt(user_question, similar_questions)
 
-    # 선택된 모델에 따라 응답 생성
     if MODEL_TYPE == "claude":
-        generated_answer = claude_response(prompt)
+        response_stream = claude_stream_response(prompt)
     elif MODEL_TYPE == "openai":
-        generated_answer = openai_response(prompt)
+        response_stream = openai_stream_response(prompt)
     else:
         return jsonify({"error": f"Unsupported model type: {MODEL_TYPE}"}), 400
 
-    # 응답 반환
-    return jsonify({
-        "generated_answer": generated_answer,
-        "details": similar_questions
-    })
+    def generate():
+        for chunk in response_stream:
+            if chunk:
+                yield chunk
+            else:
+                print("Empty chunk received")  # 디버깅
+
+    return Response(
+        generate(),
+        content_type="text/plain; charset=utf-8",
+        headers={"Transfer-Encoding": "chunked"}
+    )
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.getenv("PORT", 5000), debug=True)
