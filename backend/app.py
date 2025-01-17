@@ -23,17 +23,48 @@ bedrock_client = boto3.client(
 
 MODEL_TYPE = os.getenv("MODEL_TYPE", "claude")  # 기본값 Claude
 
+# S3 설정
+s3_client = boto3.client(
+    "s3",
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
+
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+EMBEDDINGS_FILE_KEY = os.getenv("EMBEDDINGS_FILE_KEY", "embeddings.pt")
+DATA_FILE_KEY = os.getenv("DATA_FILE_KEY", "data.json")
+LOCAL_EMBEDDINGS_PATH = "embeddings.pt"
+LOCAL_DATA_PATH = "data.json"
+
+# S3에서 파일 다운로드 함수
+def download_file_from_s3(bucket_name, file_key, local_path):
+    try:
+        print(f"Downloading {file_key} from S3 bucket {bucket_name}...")
+        s3_client.download_file(bucket_name, file_key, local_path)
+        print(f"File {file_key} successfully downloaded to {local_path}.")
+    except Exception as e:
+        print(f"Error downloading {file_key} from S3: {e}")
+        raise
+
 openai_client = None
 if MODEL_TYPE == "openai":
     from openai import OpenAI
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+# 서버 시작 시 S3에서 파일 다운로드
+if not os.path.exists(LOCAL_EMBEDDINGS_PATH):
+    download_file_from_s3(S3_BUCKET_NAME, EMBEDDINGS_FILE_KEY, LOCAL_EMBEDDINGS_PATH)
+    
+if not os.path.exists(LOCAL_DATA_PATH):
+    download_file_from_s3(S3_BUCKET_NAME, DATA_FILE_KEY, LOCAL_DATA_PATH)
 
 # JSON 데이터 로드
-with open('data.json', 'r') as file:
+with open(LOCAL_DATA_PATH, 'r') as file:
     data = json.load(file)
 
 # 사전 계산된 임베딩 로드
-embeddings = torch.load('embeddings.pt')
+embeddings = torch.load(LOCAL_EMBEDDINGS_PATH)
 title_embeddings = embeddings["title_embeddings"]
 question_embeddings = embeddings["question_embeddings"]
 answer_embeddings = embeddings["answer_embeddings"]
