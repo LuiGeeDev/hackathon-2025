@@ -374,9 +374,6 @@ function useGeneratedAnswer(
 
   useEffect(() => {
     const fetchGeneratedAnswer = async () => {
-      if (true) {
-        return;
-      }
       try {
         const response = await fetch(
           `${import.meta.env.VITE_BACKEND_URL}/api/stream_generated_answer`,
