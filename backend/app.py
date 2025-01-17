@@ -53,9 +53,14 @@ if MODEL_TYPE == "openai":
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
 # 서버 시작 시 S3에서 파일 다운로드
+print(f"local embeddings exist: {os.path.exists(LOCAL_EMBEDDINGS_PATH)}")
 if not os.path.exists(LOCAL_EMBEDDINGS_PATH):
     download_file_from_s3(S3_BUCKET_NAME, EMBEDDINGS_FILE_KEY, LOCAL_EMBEDDINGS_PATH)
-    
+
+print(f"local data exists: {os.path.exists(LOCAL_DATA_PATH)}")
+if os.path.exists(LOCAL_DATA_PATH):
+    with open(LOCAL_DATA_PATH, 'r') as file:
+        print(file.read())
 if not os.path.exists(LOCAL_DATA_PATH):
     download_file_from_s3(S3_BUCKET_NAME, DATA_FILE_KEY, LOCAL_DATA_PATH)
 
