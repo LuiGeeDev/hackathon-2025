@@ -1,4 +1,6 @@
 import { FormEvent, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 
 function App() {
   const [question, setQuestion] = useState("");
@@ -41,7 +43,6 @@ function App() {
             const { value, done } = await reader.read();
             if (done) break;
             const chunk = decoder.decode(value, { stream: true });
-            console.log("Received chunk:", chunk); // 디버깅
             setGeneratedAnswer((prev) => (prev || "") + chunk);
           }
         }
@@ -52,7 +53,7 @@ function App() {
   };
 
   return (
-    <div style={{ padding: "20px" }}>
+    <div className="p-21">
       <h1>질문하기</h1>
       <form onSubmit={handleSubmit}>
         <input
@@ -91,11 +92,22 @@ function App() {
       {generatedAnswer && (
         <div style={{ marginTop: "20px" }}>
           <h2>생성된 답변:</h2>
-          <p style={{ whiteSpace: "pre-wrap" }}>{generatedAnswer}</p>
+          <ReactMarkdown
+            className="prose max-w-none"
+            rehypePlugins={[rehypeRaw]}
+          >
+            {replaceReferencesWithSpans(generatedAnswer)}
+          </ReactMarkdown>
         </div>
       )}
     </div>
   );
+}
+
+function replaceReferencesWithSpans(answer: string): string {
+  return answer.replace(/\[(\d+)\]/g, (_, number) => {
+    return `<span class="bg-gray-100 size-16 text-sm inline-flex items-center justify-center font-bold rounded-full mx-4">${number}</span>`;
+  });
 }
 
 export default App;
