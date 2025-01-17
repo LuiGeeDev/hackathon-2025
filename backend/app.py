@@ -228,6 +228,15 @@ def stream_generated_answer():
         content_type="text/plain; charset=utf-8",
         headers={"Transfer-Encoding": "chunked"}
     )
+    
+# Health Check Endpoint
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    헬스 체크 엔드포인트.
+    서버가 정상적으로 실행되고 있는지 확인합니다.
+    """
+    return jsonify({"status": "healthy", "message": "Server is running properly"}), 200
 
 
 
