@@ -2,10 +2,16 @@
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      extend: {},
+    },
     spacing: spacing(),
   },
-  plugins: [require("@tailwindcss/typography")],
+  plugins: [
+    require("@tailwindcss/typography"),
+    require("@comento/tailwind-plugin"),
+    require("tailwind-scrollbar"),
+  ],
 };
 
 function spacing() {
