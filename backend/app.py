@@ -226,5 +226,10 @@ def stream_generated_answer():
 
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=os.getenv("PORT", 5000), debug=True)
+if __name__ == "__main__":
+    # FLASK_ENV 환경 변수를 확인하여 로컬 개발 환경에서만 실행
+    if os.getenv("FLASK_ENV", "production") == "development":
+        print("Running in development mode with Flask server...")
+        app.run(host='0.0.0.0', port=os.getenv("PORT", 5000), debug=True)
+    else:
+        print("Running in production mode. Use a WSGI server like Gunicorn.")
