@@ -15,7 +15,7 @@ function App() {
     setGeneratedAnswer(null);
 
     // details 요청
-    fetch("http://127.0.0.1:5000/api/question_details", {
+    fetch(`${import.meta.env.VITE_BACKEND_URL}/api/question_details`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_question: question }),
@@ -29,7 +29,7 @@ function App() {
       });
 
     // generated_answer 스트리밍 요청
-    fetch("http://127.0.0.1:5000/api/stream_generated_answer", {
+    fetch(`${import.meta.env.VITE_BACKEND_URL}/api/stream_generated_answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_question: question }),
