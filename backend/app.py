@@ -58,9 +58,6 @@ if not os.path.exists(LOCAL_EMBEDDINGS_PATH):
     download_file_from_s3(S3_BUCKET_NAME, EMBEDDINGS_FILE_KEY, LOCAL_EMBEDDINGS_PATH)
 
 print(f"local data exists: {os.path.exists(LOCAL_DATA_PATH)}")
-if os.path.exists(LOCAL_DATA_PATH):
-    with open(LOCAL_DATA_PATH, 'r') as file:
-        print(file.read())
 if not os.path.exists(LOCAL_DATA_PATH):
     download_file_from_s3(S3_BUCKET_NAME, DATA_FILE_KEY, LOCAL_DATA_PATH)
 
@@ -78,7 +75,7 @@ answer_embeddings = embeddings["answer_embeddings"]
 def claude_stream_response(prompt):
     request_body = {
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 2048,
+        "max_tokens": 1024,
         "temperature": 0.7,
         "messages": [
             {"role": "user", "content": [{"type": "text", "text": prompt}]}
@@ -120,6 +117,7 @@ def openai_stream_response(prompt):
             {"role": "system", "content": "친근하고 상세한 검색형 답변을 생성하세요."},
             {"role": "user", "content": prompt},
         ],
+        max_tokens=1024,
         temperature=0.7,
         stream=True
     )
@@ -153,13 +151,14 @@ def find_similar_questions(user_question):
         0.2 * answer_similarities
     )
     
-    similar_indices = torch.argsort(combined_scores, descending=True)[:4]
+    similar_indices = torch.argsort(combined_scores, descending=True)[:3]
     results = [
         {
             "title": data[i]["title"],
             "question": data[i]["question"],
             "answer": data[i]["answer"],
             "source": data[i]["source"],
+            "company": data[i]["company"],
             "similarity": combined_scores[i].item()
         }
         for i in similar_indices
@@ -172,7 +171,8 @@ def generate_prompt(user_question, similar_questions):
         "당신은 정보를 검색하고 요약하는 검색 엔진 역할을 합니다. "
         "사용자의 질문에 대해 다양한 출처를 참고하여 친근하고 이해하기 쉬운 답변을 작성하세요. "
         "답변은 명확하고 구체적이며, 충분히 상세해야 합니다. "
-        "답변 중간에는 [1], [2]와 같은 형식으로 출처를 명시하세요.\n\n"
+        "답변 중간에는 [1], [2]와 같은 형식으로 출처를 명시하세요. "
+        "출처는 문장 부호(. ,) 뒤에 표시하세요. 예) 같습니다. [1]\n\n"
     )
     prompt += f"사용자의 질문: {user_question}\n\n"
     prompt += "다음은 참고할 수 있는 출처입니다:\n"
@@ -191,11 +191,13 @@ def generate_prompt(user_question, similar_questions):
     
     return prompt
 
+import time
 # API 엔드포인트: 유사 질문 반환
 @app.route('/api/question_details', methods=['POST'])
 def get_question_details():
     user_data = request.json
     user_question = user_data.get("user_question")
+    time.sleep(1.5)
 
     similar_questions = find_similar_questions(user_question)
     return jsonify({"details": similar_questions})
