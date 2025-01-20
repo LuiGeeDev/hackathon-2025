@@ -14,7 +14,7 @@ export default function OtherSource({
     <li>
       <a
         href={answer.source}
-        className="block bg-gray-050 py-12 px-16 rounded-8 hover:bg-gray-200"
+        className="block bg-gray-100 py-12 px-16 rounded-8 hover:bg-gray-200"
         target="_blank"
       >
         <header className="flex items-center text-body1 font-600 text-gray-800 line-clamp-1 text-ellipsis">

@@ -214,7 +214,7 @@ export default function Result() {
                     <li key={index} className="flex-1">
                       <Link
                         to={`/${encodeURIComponent(question)}`}
-                        className="block p-12 rounded-8 bg-blue-000 text-gray-800 text-body2 hover:bg-blue-100 min-h-84"
+                        className="block p-12 rounded-8 bg-blue-050 text-gray-800 text-body2 hover:bg-blue-100 min-h-84"
                       >
                         <p className="line-clamp-3">
                           <span className="text-blue-400 font-600">Q. </span>
